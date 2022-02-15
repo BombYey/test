@@ -1,0 +1,55 @@
+name: autograder
+
+on:
+  pull_request:
+  push:
+
+jobs:
+  autograder:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+
+    services:
+      postgres:
+        image: postgres
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - uses: actions/checkout@v2
+      - name: Configure PostgreSQL
+        run: |
+          cat > ~/.pgpass <<PGPASS
+          # hostname:port:database:username:password
+          $PGHOST:$PGPORT:*:$PGUSER:postgres
+          PGPASS
+
+          chmod 600 ~/.pgpass
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes \
+              colordiff \
+              postgresql-client
+      - name: Create databases
+        run: |
+          for database in ConstructCo LargeCo; do
+            psql --command="CREATE DATABASE \"$database\";"
+            psql --dbname="$database" \
+                 --file="Ch07_${database}_PostgreSQL.sql" --quiet
+          done
+      - name: Test queries
+        run: |
+          ./run.sh
